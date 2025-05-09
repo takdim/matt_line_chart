@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PRB and Payload Utilization</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Tailwind bg-gray-100 */
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 1000px; /* Tailwind max-w-4xl */
+            margin: 2rem auto; /* Tailwind mx-auto my-8 */
+            padding: 1rem;        /* Tailwind p-4 */
+            background-color: #fff;  /* Tailwind bg-white */
+            border-radius: 0.5rem;  /* Tailwind rounded-lg */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);  /* Tailwind shadow-md */
+        }
+        .heading {
+            font-size: 1.875rem; /* Tailwind text-2xl */
+            font-weight: bold;    /* Tailwind font-semibold */
+            color: #334155;      /* Tailwind text-gray-800 */
+            margin-bottom: 1.5rem;  /* Tailwind mb-6 */
+            text-align: center;
+        }
+        .select-container {
+            margin-bottom: 1.5rem;  /* Tailwind mb-6 */
+        }
+        .select-label {
+            display: block;
+            font-size: 0.875rem;  /* Tailwind text-sm */
+            font-weight: 500;     /* Tailwind font-medium */
+            color: #4b5563;       /* Tailwind text-gray-700 */
+            margin-bottom: 0.5rem;  /* Tailwind mb-2 */
+        }
+        .site-select {
+            width: 100%;
+            padding: 0.75rem;      /* Tailwind py-3 px-4 */
+            border-radius: 0.375rem;  /* Tailwind rounded-md */
+            border: 1px solid #d1d5db;  /* Tailwind border-gray-300 */
+            font-size: 1rem;         /* Tailwind text-base */
+            color: #374151;       /* Tailwind text-gray-900 */
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.075); /* Inner shadow, more subtle */
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out; /* Smooth transition */
+        }
+        .site-select:focus {
+            outline: none;
+            border-color: #3b82f6;  /* Tailwind border-blue-500 */
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);  /* Tailwind ring-blue-500 with opacity */
+        }
+        .chart-container {
+            width: 100%;
+            margin-bottom: 1.5rem;  /* Tailwind mb-6 */
+        }
+        .chart-canvas {
+            /* width and height will be set by Chart.js, but we can add some style */
+            border-radius: 0.5rem; /* Tailwind rounded-lg */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);  /* Slightly lighter shadow */
+            background-color: #fff;
+        }
+        .no-data-message {
+            text-align: center;
+            padding: 1rem;
+            border: 1px solid #f0f0f0;
+            border-radius: 0.375rem;
+            margin-top: 1rem;
+            color: #6b7280;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 class="heading">PRB and Payload Utilization</h2>
+
+        <div class="select-container">
+            <label for="site-select" class="select-label">Select Site:</label>
+            <select id="site-select" class="site-select">
+                <option value="">-- Choose Site --</option>
+            </select>
+        </div>
+
+        <div class="chart-container" style="display: none;">
+            <canvas id="prbPayloadChart" class="chart-canvas"></canvas>
+        </div>
+        <div class="no-data-message" style="display: none;">
+            No data available for the selected site.
+        </div>
+    </div>
+
+    <script>
+        const siteSelect = document.getElementById('site-select');
+        const prbPayloadChartCtx = document.getElementById('prbPayloadChart').getContext('2d');
+        const chartContainer = document.querySelector('.chart-container');
+        const noDataMessage = document.querySelector('.no-data-message');
+
+
+        let prbPayloadChart;
+
+        function createChart(labels, payloadValues, dlPrbValues) {
+            prbPayloadChart = new Chart(prbPayloadChartCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'CA Payload',
+                            data: payloadValues,
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)', // Blue
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 2,
+                            fill: true,
+                            yAxisID: 'y1',
+                            pointRadius: 0,
+                            pointHoverRadius: 3,
+                        },
+                        {
+                            label: 'DL PRB Utilization (%)',
+                            data: dlPrbValues,
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)', // Red
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 2,
+                            fill: true,
+                            yAxisID: 'y2',
+                            pointRadius: 0,
+                            pointHoverRadius: 3,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    stacked: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'CA Payload and DL PRB Utilization',
+                            font: {
+                                size: 16,
+                                family: 'Inter',
+                                weight: 'bold'
+                            },
+                            padding: {
+                                bottom: 10
+                            }
+                        },
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: {
+                                    family: 'Inter'
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: 'Date',
+                                font: {
+                                    family: 'Inter',
+                                    weight: 'normal'
+                                },
+                                padding: {
+                                    top: 10
+                                }
+                            },
+                            ticks: {
+                                font: {
+                                    family: 'Inter'
+                                },
+                                autoSkip: true,
+                                maxRotation: 50,
+                                minRotation: 30,
+                                maxTicksLimit: 20
+                            },
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'CA Payload',
+                                font: {
+                                    family: 'Inter',
+                                    weight: 'normal'
+                                },
+                                padding: {
+                                    bottom: 10
+                                }
+                            },
+                            ticks: {
+                                font: {
+                                    family: 'Inter'
+                                },
+                                beginAtZero: true
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        y2: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: 'DL PRB Utilization (%)',
+                                font: {
+                                    family: 'Inter',
+                                    weight: 'normal'
+                                },
+                                padding: {
+                                    bottom: 10
+                                }
+                            },
+                            ticks: {
+                                font: {
+                                    family: 'Inter'
+                                },
+                                beginAtZero: true,
+                                max: 100
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        }
+                    }
+                }
+            });
+            chartContainer.style.display = 'block';
+            noDataMessage.style.display = 'none';
+        }
+
+        function updateChart(labels, payloadValues, dlPrbValues) {
+            if (prbPayloadChart) {
+                prbPayloadChart.data.labels = labels;
+                prbPayloadChart.data.datasets[0].data = payloadValues;
+                prbPayloadChart.data.datasets[1].data = dlPrbValues;
+                prbPayloadChart.update();
+                chartContainer.style.display = 'block';
+                noDataMessage.style.display = 'none';
+            } else {
+                createChart(labels, payloadValues, dlPrbValues);
+            }
+        }
+
+        function fetchData(siteId) {
+            fetch(`/get_data?site_id=${siteId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.labels.length > 0) {
+                        updateChart(data.labels, data.payload_values, data.dl_prb_values);
+                    } else {
+                        if (prbPayloadChart) {
+                            prbPayloadChart.destroy();
+                            prbPayloadChart = null;
+                        }
+                        chartContainer.style.display = 'none';
+                        noDataMessage.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching data:', error);
+                    chartContainer.style.display = 'none';
+                    noDataMessage.style.display = 'block';
+                });
+        }
+
+        fetch('/get_site_ids')
+            .then(response => response.json())
+            .then(data => {
+                data.forEach(siteId => {
+                    const option = document.createElement('option');
+                    option.value = siteId;
+                    option.textContent = siteId;
+                    siteSelect.appendChild(option);
+                });
+            })
+            .catch(error => console.error('Error fetching site IDs:', error));
+
+        siteSelect.addEventListener('change', (event) => {
+            const selectedSiteId = event.target.value;
+            if (selectedSiteId) {
+                fetchData(selectedSiteId);
+            } else {
+                if (prbPayloadChart) {
+                    prbPayloadChart.destroy();
+                    prbPayloadChart = null;
+                }
+                chartContainer.style.display = 'none';
+                noDataMessage.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

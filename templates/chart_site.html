@@ -1,63 +1,553 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>PRB Utilization by Site</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PRB Utilization Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+            margin-bottom: 30px;
+        }
+        .card {
+            margin-bottom: 20px;
+        }
+        /* Highlight rows on hover for better readability */
+        #resultTable tbody tr:hover {
+            background-color: rgba(0,0,0,0.075);
+        }
+        /* Add loading overlay */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255,255,255,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            z-index: 10;
+        }
+    </style>
 </head>
 <body>
-    <h3>PRB Utilization by Site</h3>
+    <div class="container mt-4">
+        <h1 class="mb-4">PRB Utilization Dashboard</h1>
+        
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Filter Options</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="siteSelect" class="form-label">Select Sites:</label>
+                            <select id="siteSelect" class="form-select" multiple size="5">
+                                {% for site_id in site_ids %}
+                                <option value="{{ site_id }}">{{ site_id }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Hold Ctrl/Cmd to select multiple sites</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="datePicker" class="form-label">Reference Date:</label>
+                            <input type="date" id="datePicker" class="form-control">
+                        </div>
+                        <button id="loadData" class="btn btn-primary">Load Data</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Historical Data</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="historicalSiteSelect" class="form-label">Select Site:</label>
+                            <select id="historicalSiteSelect" class="form-select">
+                                <option value="">Select a site</option>
+                                {% for site_id in site_ids %}
+                                <option value="{{ site_id }}">{{ site_id }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cellNameSelect" class="form-label">Cell Name:</label>
+                            <select id="cellNameSelect" class="form-select">
+                                <option value="">Please select a site first</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="daysSelect" class="form-label">Days to display:</label>
+                            <select id="daysSelect" class="form-select">
+                                <option value="7">7 days</option>
+                                <option value="14">14 days</option>
+                                <option value="30">30 days</option>
+                            </select>
+                        </div>
+                        <button id="loadHistorical" class="btn btn-primary">Load Historical Data</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Current PRB Utilization</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table id="resultTable" class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Site ID</th>
+                                        <th>Sector</th>
+                                        <th>Band Combination</th>
+                                        <th>L900</th>
+                                        <th>L1800</th>
+                                        <th>L2100</th>
+                                        <th>L2300 F1</th>
+                                        <th>L2300 F2</th>
+                                        <th>L2300 F3</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Data will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Historical PRB Utilization Chart</h5>
+                        <div class="form-check form-switch mt-2">
+                            <input class="form-check-input" type="checkbox" id="autoScaleSwitch" checked>
+                            <label class="form-check-label" for="autoScaleSwitch">Auto-scale Y-axis</label>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container position-relative">
+                            <canvas id="historicalChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-    <form method="get" action="/">
-        <label for="site_id">Select Site:</label>
-        <select name="site_id" id="site_id" onchange="this.form.submit()">
-            <option value="">-- Choose Site --</option>
-            {% for site in site_ids %}
-                <option value="{{ site }}" {% if site == selected_site %}selected{% endif %}>{{ site }}</option>
-            {% endfor %}
-        </select>
-    </form>
-
-    {% if chart_data %}
-    <canvas id="lineChart" width="1000" height="600"></canvas>
     <script>
-        const ctx = document.getElementById('lineChart').getContext('2d');
-        const data = {{ chart_data | safe }};
-
-        new Chart(ctx, {
-            type: 'line',
-            data: data,
-            options: {
-                responsive: true,
-                interaction: {
-                    mode: 'index',
-                    intersect: false,
-                },
-                plugins: {
-                    legend: {
-                        position: 'left',
-                        labels: {
-                            boxWidth: 12
-                        }
+        // Initialize variables
+        let historicalChart = null;
+        let cellNamesCache = {};
+        
+        // Set default date to today
+        document.getElementById('datePicker').valueAsDate = new Date();
+        
+        // Load data button click handler
+        document.getElementById('loadData').addEventListener('click', function() {
+            const selectedSites = Array.from(document.getElementById('siteSelect').selectedOptions).map(option => option.value);
+            const referenceDate = document.getElementById('datePicker').value;
+            
+            if (selectedSites.length === 0) {
+                alert('Please select at least one site.');
+                return;
+            }
+            
+            fetchData(selectedSites, referenceDate);
+        });
+        
+        // Load cell names when site is selected
+        document.getElementById('historicalSiteSelect').addEventListener('change', function() {
+            const siteId = this.value;
+            if (!siteId) {
+                document.getElementById('cellNameSelect').innerHTML = '<option value="">Please select a site first</option>';
+                return;
+            }
+            
+            fetchCellNames(siteId);
+        });
+        
+        // Load historical data button click handler
+        document.getElementById('loadHistorical').addEventListener('click', function() {
+            const siteId = document.getElementById('historicalSiteSelect').value;
+            const cellName = document.getElementById('cellNameSelect').value;
+            const days = document.getElementById('daysSelect').value;
+            
+            if (!siteId) {
+                alert('Please select a site.');
+                return;
+            }
+            
+            if (!cellName) {
+                alert('Please select a cell name.');
+                return;
+            }
+            
+            fetchHistoricalData(siteId, cellName, days);
+        });
+        
+        // Function to fetch cell names for a given site
+        function fetchCellNames(siteId) {
+            // Check if we have this data cached
+            if (cellNamesCache[siteId]) {
+                populateCellNameDropdown(cellNamesCache[siteId]);
+                return;
+            }
+            
+            // Show loading in the dropdown
+            const cellNameSelect = document.getElementById('cellNameSelect');
+            cellNameSelect.innerHTML = '<option value="">Loading cell names...</option>';
+            
+            fetch(`/cell_names?site_id=${siteId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
                     }
+                    return response.json();
+                })
+                .then(data => {
+                    // Cache the result
+                    cellNamesCache[siteId] = data.cell_names;
+                    populateCellNameDropdown(data.cell_names);
+                })
+                .catch(error => {
+                    console.error('Error fetching cell names:', error);
+                    cellNameSelect.innerHTML = '<option value="">Error loading cell names</option>';
+                });
+        }
+        
+        // Function to populate cell name dropdown
+        function populateCellNameDropdown(cellNames) {
+            const cellNameSelect = document.getElementById('cellNameSelect');
+            cellNameSelect.innerHTML = '';
+            
+            if (cellNames.length === 0) {
+                cellNameSelect.innerHTML = '<option value="">No cell names available</option>';
+                return;
+            }
+            
+            // Add default option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = "";
+            defaultOption.textContent = "Select a cell name";
+            cellNameSelect.appendChild(defaultOption);
+            
+            // Add cell names
+            cellNames.forEach(cellName => {
+                const option = document.createElement('option');
+                option.value = cellName;
+                option.textContent = cellName;
+                cellNameSelect.appendChild(option);
+            });
+        }
+        
+        // Function to fetch current PRB data
+        function fetchData(siteIds, referenceDate) {
+            const tableBody = document.getElementById('resultTable').getElementsByTagName('tbody')[0];
+            tableBody.innerHTML = '<tr><td colspan="9" class="text-center"><div class="spinner-border spinner-border-sm" role="status"></div> Loading data...</td></tr>';
+            
+            const params = new URLSearchParams();
+            siteIds.forEach(siteId => params.append('site_ids[]', siteId));
+            if (referenceDate) params.append('reference_date', referenceDate);
+            
+            fetch(`/data?${params.toString()}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    populateTable(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching data:', error);
+                    tableBody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">Error loading data: ${error.message}</td></tr>`;
+                });
+        }
+        
+        // Function to fetch historical data and display chart
+        function fetchHistoricalData(siteId, cellName, days) {
+            // Show loading indicator
+            const chartContainer = document.querySelector('.chart-container');
+            
+            // Create loading overlay if it doesn't exist
+            let loadingOverlay = chartContainer.querySelector('.loading-overlay');
+            if (!loadingOverlay) {
+                loadingOverlay = document.createElement('div');
+                loadingOverlay.className = 'loading-overlay';
+                loadingOverlay.innerHTML = `
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading data...</p>
+                `;
+                chartContainer.appendChild(loadingOverlay);
+            } else {
+                loadingOverlay.style.display = 'flex';
+            }
+            
+            fetch(`/historical_cell_data?site_id=${siteId}&cell_name=${encodeURIComponent(cellName)}&days=${days}`)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.error || 'Network response was not ok');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Hide loading overlay
+                    loadingOverlay.style.display = 'none';
+                    
+                    // Create or update chart
+                    createHistoricalChart(data, siteId, cellName);
+                })
+                .catch(error => {
+                    console.error('Error fetching historical data:', error);
+                    loadingOverlay.style.display = 'none';
+                    
+                    // Show error message
+                    if (!chartContainer.querySelector('.error-message')) {
+                        const errorMsg = document.createElement('div');
+                        errorMsg.className = 'alert alert-danger error-message';
+                        errorMsg.textContent = `Error: ${error.message}`;
+                        chartContainer.appendChild(errorMsg);
+                    }
+                });
+        }
+        
+        // Function to populate the result table
+        function populateTable(data) {
+            const tableBody = document.getElementById('resultTable').getElementsByTagName('tbody')[0];
+            tableBody.innerHTML = '';
+            
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                
+                // Make site ID clickable to select site in historical view
+                tr.innerHTML = `
+                    <td><a href="#" class="site-link" data-site="${row.site_id}">${row.site_id}</a></td>
+                    <td>${row.sector}</td>
+                    <td>${row.band_combination}</td>
+                    <td>${formatValue(row.L900)}</td>
+                    <td>${formatValue(row.L1800)}</td>
+                    <td>${formatValue(row.L2100)}</td>
+                    <td>${formatValue(row.L2300_F1)}</td>
+                    <td>${formatValue(row.L2300_F2)}</td>
+                    <td>${formatValue(row.L2300_F3)}</td>
+                `;
+                
+                tableBody.appendChild(tr);
+            });
+            
+            // Add click handlers for site links
+            document.querySelectorAll('.site-link').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const siteId = this.getAttribute('data-site');
+                    
+                    // Set the site in the historical data form
+                    document.getElementById('historicalSiteSelect').value = siteId;
+                    
+                    // Trigger the cell names load
+                    fetchCellNames(siteId);
+                    
+                    // Scroll to the historical section
+                    document.getElementById('historicalSiteSelect').scrollIntoView({ behavior: 'smooth' });
+                });
+            });
+        }
+        
+        // Format null values
+        function formatValue(value) {
+            return value !== null && value !== undefined ? value.toFixed(2) + '%' : '-';
+        }
+        
+        // Function to create historical chart with proper scaling
+        function createHistoricalChart(data, siteId, cellName) {
+            const ctx = document.getElementById('historicalChart').getContext('2d');
+            
+            // Destroy previous chart if it exists
+            if (historicalChart) {
+                historicalChart.destroy();
+            }
+            
+            // Debug: Log data received from server
+            console.log("Chart data received:", data);
+            
+            // Prepare datasets
+            const datasets = [];
+            const colors = {
+                'L900': 'rgba(255, 99, 132, 0.7)',
+                'L1800': 'rgba(54, 162, 235, 0.7)',
+                'L2100': 'rgba(255, 206, 86, 0.7)',
+                'L2300 F1': 'rgba(75, 192, 192, 0.7)',
+                'L2300 F2': 'rgba(153, 102, 255, 0.7)',
+                'L2300 F3': 'rgba(255, 159, 64, 0.7)'
+            };
+            
+            // Only add datasets for bands that have data
+            for (const [band, values] of Object.entries(data.bands)) {
+                // Check if there's any non-zero data
+                const hasData = values.some(val => val > 0);
+                if (hasData) {
+                    // Convert values from decimal (0.xx) to percentage (xx%)
+                    const percentageValues = values.map(val => val * 100);
+                    
+                    datasets.push({
+                        label: band,
+                        data: percentageValues, // Use percentage values
+                        borderColor: colors[band] || 'rgba(0, 0, 0, 0.7)',
+                        backgroundColor: colors[band] || 'rgba(0, 0, 0, 0.7)',
+                        fill: false,
+                        tension: 0.1
+                    });
+                }
+            }
+            
+            // If no datasets with data, show a message
+            if (datasets.length === 0) {
+                // Remove any existing error messages
+                const errorMsgElements = document.querySelectorAll('.error-message');
+                errorMsgElements.forEach(el => el.remove());
+                
+                // Show no data message
+                const chartContainer = document.querySelector('.chart-container');
+                const noDataMsg = document.createElement('div');
+                noDataMsg.className = 'alert alert-warning error-message';
+                noDataMsg.style.position = 'absolute';
+                noDataMsg.style.top = '50%';
+                noDataMsg.style.left = '50%';
+                noDataMsg.style.transform = 'translate(-50%, -50%)';
+                noDataMsg.textContent = `No PRB utilization data available for Site ${siteId}, Cell ${cellName}.`;
+                chartContainer.appendChild(noDataMsg);
+                return;
+            }
+            
+            // Remove any existing error messages
+            const errorMsgElements = document.querySelectorAll('.error-message');
+            errorMsgElements.forEach(el => el.remove());
+            
+            // Find min and max values to set appropriate Y-axis scale
+            let maxValue = 0;
+            let minValue = Number.MAX_VALUE;
+            
+            datasets.forEach(dataset => {
+                const dataMax = Math.max(...dataset.data);
+                const dataMin = Math.min(...dataset.data.filter(val => val > 0));
+                
+                if (dataMax > maxValue) maxValue = dataMax;
+                if (dataMin < minValue && dataMin > 0) minValue = dataMin;
+            });
+            
+            // Add padding to max/min for better visualization
+            maxValue = Math.min(Math.ceil(maxValue * 1.1), 100);  // Cap at 100%
+            minValue = Math.max(0, Math.floor(minValue * 0.9));   // Don't go below 0
+            
+            // Check if auto-scale is enabled
+            const autoScale = document.getElementById('autoScaleSwitch').checked;
+            
+            // Create chart with adjusted Y-axis
+            historicalChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.dates,
+                    datasets: datasets
                 },
-                scales: {
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'DL PRB Utilization (%)'
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: minValue === 0 || !autoScale,
+                            suggestedMin: autoScale ? minValue : 0,
+                            suggestedMax: autoScale ? maxValue : 100,
+                            title: {
+                                display: true,
+                                text: 'PRB Utilization (%)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
                         }
                     },
-                    x: {
-                        ticks: {
-                            autoSkip: false,
-                            maxRotation: 45,
-                            minRotation: 45
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        title: {
+                            display: true,
+                            text: `Site ${siteId} - Cell ${cellName} PRB Utilization`
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toFixed(2) + '%';
+                                    }
+                                    return label;
+                                }
+                            }
                         }
                     }
                 }
+            });
+        }
+        
+        // Auto-scale switch change handler
+        document.getElementById('autoScaleSwitch').addEventListener('change', function() {
+            if (historicalChart) {
+                const siteId = document.getElementById('historicalSiteSelect').value;
+                const cellName = document.getElementById('cellNameSelect').value;
+                const days = document.getElementById('daysSelect').value;
+                
+                if (siteId && cellName) {
+                    fetchHistoricalData(siteId, cellName, days);
+                }
             }
         });
+        
+        // Initial data load with default values (if any sites are available)
+        window.onload = function() {
+            const siteSelect = document.getElementById('siteSelect');
+            if (siteSelect.options.length > 0) {
+                // Select the first site by default
+                siteSelect.options[0].selected = true;
+                document.getElementById('loadData').click();
+                
+                // Also set the first site in the historical data selector
+                document.getElementById('historicalSiteSelect').value = siteSelect.options[0].value;
+                fetchCellNames(siteSelect.options[0].value);
+            }
+        };
     </script>
-    {% endif %}
 </body>
 </html>

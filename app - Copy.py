@@ -11,7 +11,7 @@ df.fillna(0, inplace=True)
 @app.route('/')
 def index():
     site_ids = df['site_id'].dropna().unique().tolist()
-    return render_template('chart.html', site_ids=site_ids)
+    return render_template('chart_site.html', site_ids=site_ids)
 
 @app.route('/get_data')
 def get_data():
