@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PRB Utilization by Site</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h3>PRB Utilization by Site</h3>
+
+    <form method="get" action="/">
+        <label for="site_id">Select Site:</label>
+        <select name="site_id" id="site_id" onchange="this.form.submit()">
+            <option value="">-- Choose Site --</option>
+            {% for site in site_ids %}
+                <option value="{{ site }}" {% if site == selected_site %}selected{% endif %}>{{ site }}</option>
+            {% endfor %}
+        </select>
+    </form>
+
+    {% if chart_data %}
+    <canvas id="lineChart" width="1000" height="600"></canvas>
+    <script>
+        const ctx = document.getElementById('lineChart').getContext('2d');
+        const data = {{ chart_data | safe }};
+
+        new Chart(ctx, {
+            type: 'line',
+            data: data,
+            options: {
+                responsive: true,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        position: 'left',
+                        labels: {
+                            boxWidth: 12
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'DL PRB Utilization (%)'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            autoSkip: false,
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+    {% endif %}
+</body>
+</html>
