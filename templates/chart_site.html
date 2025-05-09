@@ -16,10 +16,6 @@
         .card {
             margin-bottom: 20px;
         }
-        /* Highlight rows on hover for better readability */
-        #resultTable tbody tr:hover {
-            background-color: rgba(0,0,0,0.075);
-        }
         /* Add loading overlay */
         .loading-overlay {
             position: absolute;
@@ -44,30 +40,6 @@
             <div class="col-md-6">
                 <div class="card">
                     <div class="card-header">
-                        <h5>Filter Options</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label for="siteSelect" class="form-label">Select Sites:</label>
-                            <select id="siteSelect" class="form-select" multiple size="5">
-                                {% for site_id in site_ids %}
-                                <option value="{{ site_id }}">{{ site_id }}</option>
-                                {% endfor %}
-                            </select>
-                            <div class="form-text">Hold Ctrl/Cmd to select multiple sites</div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="datePicker" class="form-label">Reference Date:</label>
-                            <input type="date" id="datePicker" class="form-control">
-                        </div>
-                        <button id="loadData" class="btn btn-primary">Load Data</button>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
                         <h5>Historical Data</h5>
                     </div>
                     <div class="card-body">
@@ -81,8 +53,8 @@
                             </select>
                         </div>
                         <div class="mb-3">
-                            <label for="cellNameSelect" class="form-label">Cell Name:</label>
-                            <select id="cellNameSelect" class="form-select">
+                            <label for="sectorSelect" class="form-label">Select Sector:</label>
+                            <select id="sectorSelect" class="form-select">
                                 <option value="">Please select a site first</option>
                             </select>
                         </div>
@@ -95,38 +67,6 @@
                             </select>
                         </div>
                         <button id="loadHistorical" class="btn btn-primary">Load Historical Data</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="row">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5>Current PRB Utilization</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table id="resultTable" class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>Site ID</th>
-                                        <th>Sector</th>
-                                        <th>Band Combination</th>
-                                        <th>L900</th>
-                                        <th>L1800</th>
-                                        <th>L2100</th>
-                                        <th>L2300 F1</th>
-                                        <th>L2300 F2</th>
-                                        <th>L2300 F3</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <!-- Data will be populated here -->
-                                </tbody>
-                            </table>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -155,39 +95,23 @@
     <script>
         // Initialize variables
         let historicalChart = null;
-        let cellNamesCache = {};
+        let sectorsCache = {};
         
-        // Set default date to today
-        document.getElementById('datePicker').valueAsDate = new Date();
-        
-        // Load data button click handler
-        document.getElementById('loadData').addEventListener('click', function() {
-            const selectedSites = Array.from(document.getElementById('siteSelect').selectedOptions).map(option => option.value);
-            const referenceDate = document.getElementById('datePicker').value;
-            
-            if (selectedSites.length === 0) {
-                alert('Please select at least one site.');
-                return;
-            }
-            
-            fetchData(selectedSites, referenceDate);
-        });
-        
-        // Load cell names when site is selected
+        // Load sectors when site is selected
         document.getElementById('historicalSiteSelect').addEventListener('change', function() {
             const siteId = this.value;
             if (!siteId) {
-                document.getElementById('cellNameSelect').innerHTML = '<option value="">Please select a site first</option>';
+                document.getElementById('sectorSelect').innerHTML = '<option value="">Please select a site first</option>';
                 return;
             }
             
-            fetchCellNames(siteId);
+            fetchSectors(siteId);
         });
         
         // Load historical data button click handler
         document.getElementById('loadHistorical').addEventListener('click', function() {
             const siteId = document.getElementById('historicalSiteSelect').value;
-            const cellName = document.getElementById('cellNameSelect').value;
+            const sector = document.getElementById('sectorSelect').value;
             const days = document.getElementById('daysSelect').value;
             
             if (!siteId) {
@@ -195,27 +119,27 @@
                 return;
             }
             
-            if (!cellName) {
-                alert('Please select a cell name.');
+            if (!sector) {
+                alert('Please select a sector.');
                 return;
             }
             
-            fetchHistoricalData(siteId, cellName, days);
+            fetchHistoricalData(siteId, sector, days);
         });
         
-        // Function to fetch cell names for a given site
-        function fetchCellNames(siteId) {
+        // Function to fetch sectors for a given site
+        function fetchSectors(siteId) {
             // Check if we have this data cached
-            if (cellNamesCache[siteId]) {
-                populateCellNameDropdown(cellNamesCache[siteId]);
+            if (sectorsCache[siteId]) {
+                populateSectorDropdown(sectorsCache[siteId]);
                 return;
             }
             
             // Show loading in the dropdown
-            const cellNameSelect = document.getElementById('cellNameSelect');
-            cellNameSelect.innerHTML = '<option value="">Loading cell names...</option>';
+            const sectorSelect = document.getElementById('sectorSelect');
+            sectorSelect.innerHTML = '<option value="">Loading sectors...</option>';
             
-            fetch(`/cell_names?site_id=${siteId}`)
+            fetch(`/sectors?site_id=${siteId}`)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error('Network response was not ok');
@@ -224,67 +148,42 @@
                 })
                 .then(data => {
                     // Cache the result
-                    cellNamesCache[siteId] = data.cell_names;
-                    populateCellNameDropdown(data.cell_names);
+                    sectorsCache[siteId] = data.sectors;
+                    populateSectorDropdown(data.sectors);
                 })
                 .catch(error => {
-                    console.error('Error fetching cell names:', error);
-                    cellNameSelect.innerHTML = '<option value="">Error loading cell names</option>';
+                    console.error('Error fetching sectors:', error);
+                    sectorSelect.innerHTML = '<option value="">Error loading sectors</option>';
                 });
         }
         
-        // Function to populate cell name dropdown
-        function populateCellNameDropdown(cellNames) {
-            const cellNameSelect = document.getElementById('cellNameSelect');
-            cellNameSelect.innerHTML = '';
+        // Function to populate sector dropdown
+        function populateSectorDropdown(sectors) {
+            const sectorSelect = document.getElementById('sectorSelect');
+            sectorSelect.innerHTML = '';
             
-            if (cellNames.length === 0) {
-                cellNameSelect.innerHTML = '<option value="">No cell names available</option>';
+            if (sectors.length === 0) {
+                sectorSelect.innerHTML = '<option value="">No sectors available</option>';
                 return;
             }
             
             // Add default option
             const defaultOption = document.createElement('option');
             defaultOption.value = "";
-            defaultOption.textContent = "Select a cell name";
-            cellNameSelect.appendChild(defaultOption);
+            defaultOption.textContent = "Select a sector";
+            sectorSelect.appendChild(defaultOption);
             
-            // Add cell names
-            cellNames.forEach(cellName => {
+            // Add sectors
+            sectors.forEach(sector => {
                 const option = document.createElement('option');
-                option.value = cellName;
-                option.textContent = cellName;
-                cellNameSelect.appendChild(option);
+                option.value = sector;
+                option.textContent = `Sector ${sector}`;
+                sectorSelect.appendChild(option);
             });
         }
         
-        // Function to fetch current PRB data
-        function fetchData(siteIds, referenceDate) {
-            const tableBody = document.getElementById('resultTable').getElementsByTagName('tbody')[0];
-            tableBody.innerHTML = '<tr><td colspan="9" class="text-center"><div class="spinner-border spinner-border-sm" role="status"></div> Loading data...</td></tr>';
-            
-            const params = new URLSearchParams();
-            siteIds.forEach(siteId => params.append('site_ids[]', siteId));
-            if (referenceDate) params.append('reference_date', referenceDate);
-            
-            fetch(`/data?${params.toString()}`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    populateTable(data);
-                })
-                .catch(error => {
-                    console.error('Error fetching data:', error);
-                    tableBody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">Error loading data: ${error.message}</td></tr>`;
-                });
-        }
-        
         // Function to fetch historical data and display chart
-        function fetchHistoricalData(siteId, cellName, days) {
+        function fetchHistoricalData(siteId, sector, days) {
             // Show loading indicator
             const chartContainer = document.querySelector('.chart-container');
             
@@ -304,7 +203,7 @@
                 loadingOverlay.style.display = 'flex';
             }
             
-            fetch(`/historical_cell_data?site_id=${siteId}&cell_name=${encodeURIComponent(cellName)}&days=${days}`)
+            fetch(`/historical_sector_data?site_id=${siteId}&sector=${sector}&days=${days}`)
                 .then(response => {
                     if (!response.ok) {
                         return response.json().then(err => {
@@ -318,7 +217,7 @@
                     loadingOverlay.style.display = 'none';
                     
                     // Create or update chart
-                    createHistoricalChart(data, siteId, cellName);
+                    createHistoricalChart(data, siteId, sector);
                 })
                 .catch(error => {
                     console.error('Error fetching historical data:', error);
@@ -334,55 +233,8 @@
                 });
         }
         
-        // Function to populate the result table
-        function populateTable(data) {
-            const tableBody = document.getElementById('resultTable').getElementsByTagName('tbody')[0];
-            tableBody.innerHTML = '';
-            
-            data.forEach(row => {
-                const tr = document.createElement('tr');
-                
-                // Make site ID clickable to select site in historical view
-                tr.innerHTML = `
-                    <td><a href="#" class="site-link" data-site="${row.site_id}">${row.site_id}</a></td>
-                    <td>${row.sector}</td>
-                    <td>${row.band_combination}</td>
-                    <td>${formatValue(row.L900)}</td>
-                    <td>${formatValue(row.L1800)}</td>
-                    <td>${formatValue(row.L2100)}</td>
-                    <td>${formatValue(row.L2300_F1)}</td>
-                    <td>${formatValue(row.L2300_F2)}</td>
-                    <td>${formatValue(row.L2300_F3)}</td>
-                `;
-                
-                tableBody.appendChild(tr);
-            });
-            
-            // Add click handlers for site links
-            document.querySelectorAll('.site-link').forEach(link => {
-                link.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const siteId = this.getAttribute('data-site');
-                    
-                    // Set the site in the historical data form
-                    document.getElementById('historicalSiteSelect').value = siteId;
-                    
-                    // Trigger the cell names load
-                    fetchCellNames(siteId);
-                    
-                    // Scroll to the historical section
-                    document.getElementById('historicalSiteSelect').scrollIntoView({ behavior: 'smooth' });
-                });
-            });
-        }
-        
-        // Format null values
-        function formatValue(value) {
-            return value !== null && value !== undefined ? value.toFixed(2) + '%' : '-';
-        }
-        
-        // Function to create historical chart with proper scaling
-        function createHistoricalChart(data, siteId, cellName) {
+        // Function to create historical chart with all cells for a sector
+        function createHistoricalChart(data, siteId, sector) {
             const ctx = document.getElementById('historicalChart').getContext('2d');
             
             // Destroy previous chart if it exists
@@ -395,28 +247,36 @@
             
             // Prepare datasets
             const datasets = [];
-            const colors = {
-                'L900': 'rgba(255, 99, 132, 0.7)',
-                'L1800': 'rgba(54, 162, 235, 0.7)',
-                'L2100': 'rgba(255, 206, 86, 0.7)',
-                'L2300 F1': 'rgba(75, 192, 192, 0.7)',
-                'L2300 F2': 'rgba(153, 102, 255, 0.7)',
-                'L2300 F3': 'rgba(255, 159, 64, 0.7)'
-            };
             
-            // Only add datasets for bands that have data
-            for (const [band, values] of Object.entries(data.bands)) {
+            // Generate random colors for different cell names
+            function getRandomColor() {
+                const letters = '0123456789ABCDEF';
+                let color = '#';
+                for (let i = 0; i < 6; i++) {
+                    color += letters[Math.floor(Math.random() * 16)];
+                }
+                return color;
+            }
+            
+            // Add datasets for each cell
+            for (const [cellName, values] of Object.entries(data.cells)) {
                 // Check if there's any non-zero data
                 const hasData = values.some(val => val > 0);
                 if (hasData) {
                     // Convert values from decimal (0.xx) to percentage (xx%)
                     const percentageValues = values.map(val => val * 100);
                     
+                    // Get a random color for this cell
+                    const color = getRandomColor();
+                    const rgbaColor = color.replace('#', 'rgba(')
+                        .replace(/([0-9A-F]{2})/g, '$1,')
+                        .replace(/,[^,]*$/, ',0.7)');
+                    
                     datasets.push({
-                        label: band,
-                        data: percentageValues, // Use percentage values
-                        borderColor: colors[band] || 'rgba(0, 0, 0, 0.7)',
-                        backgroundColor: colors[band] || 'rgba(0, 0, 0, 0.7)',
+                        label: cellName,
+                        data: percentageValues,
+                        borderColor: rgbaColor,
+                        backgroundColor: rgbaColor,
                         fill: false,
                         tension: 0.1
                     });
@@ -437,7 +297,7 @@
                 noDataMsg.style.top = '50%';
                 noDataMsg.style.left = '50%';
                 noDataMsg.style.transform = 'translate(-50%, -50%)';
-                noDataMsg.textContent = `No PRB utilization data available for Site ${siteId}, Cell ${cellName}.`;
+                noDataMsg.textContent = `No PRB utilization data available for Site ${siteId}, Sector ${sector}.`;
                 chartContainer.appendChild(noDataMsg);
                 return;
             }
@@ -499,7 +359,7 @@
                         },
                         title: {
                             display: true,
-                            text: `Site ${siteId} - Cell ${cellName} PRB Utilization`
+                            text: `Site ${siteId} - Sector ${sector} PRB Utilization`
                         },
                         tooltip: {
                             mode: 'index',
@@ -526,26 +386,24 @@
         document.getElementById('autoScaleSwitch').addEventListener('change', function() {
             if (historicalChart) {
                 const siteId = document.getElementById('historicalSiteSelect').value;
-                const cellName = document.getElementById('cellNameSelect').value;
+                const sector = document.getElementById('sectorSelect').value;
                 const days = document.getElementById('daysSelect').value;
                 
-                if (siteId && cellName) {
-                    fetchHistoricalData(siteId, cellName, days);
+                if (siteId && sector) {
+                    fetchHistoricalData(siteId, sector, days);
                 }
             }
         });
         
-        // Initial data load with default values (if any sites are available)
+        // Initial data load if any sites are available
         window.onload = function() {
-            const siteSelect = document.getElementById('siteSelect');
-            if (siteSelect.options.length > 0) {
+            const siteSelect = document.getElementById('historicalSiteSelect');
+            if (siteSelect.options.length > 1) {  // Skip the first "Select a site" option
                 // Select the first site by default
-                siteSelect.options[0].selected = true;
-                document.getElementById('loadData').click();
+                siteSelect.value = siteSelect.options[1].value;
                 
-                // Also set the first site in the historical data selector
-                document.getElementById('historicalSiteSelect').value = siteSelect.options[0].value;
-                fetchCellNames(siteSelect.options[0].value);
+                // Fetch sectors for the selected site
+                fetchSectors(siteSelect.value);
             }
         };
     </script>

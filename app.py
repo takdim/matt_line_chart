@@ -225,20 +225,24 @@ def process_prb_data(site_ids, reference_date=None):
     
     return result
 
-# Get cell names for a specific site
-def get_cell_names_for_site(site_id):
+# Get sectors for a specific site
+def get_sectors_for_site(site_id):
     df = load_data()
     if df.empty:
         return []
     
-    # Filter by site_id and get unique cell names
-    site_data = df[df['site_id'] == site_id]
-    cell_names = site_data['Cell Name'].unique().tolist() if 'Cell Name' in site_data.columns else []
+    # Add sector column if it doesn't exist
+    if 'sector' not in df.columns:
+        df['sector'] = df['Cell Name'].apply(determine_sector)
     
-    return sorted(cell_names)
+    # Filter by site_id and get unique sectors
+    site_data = df[df['site_id'] == site_id]
+    sectors = site_data['sector'].dropna().unique().tolist()
+    
+    return sorted(sectors)
 
-# Get historical PRB utilization data for a specific cell
-def get_historical_cell_data(site_id, cell_name, days=7):
+# Get historical PRB utilization data for a specific sector
+def get_historical_sector_data(site_id, sector, days=7):
     df = load_data()
     if df.empty:
         return {}
@@ -250,48 +254,56 @@ def get_historical_cell_data(site_id, cell_name, days=7):
     end_date = datetime.now().date()
     start_date = end_date - timedelta(days=days)
     
+    # Add sector and band columns if they don't exist
+    if 'sector' not in df.columns:
+        df['sector'] = df['Cell Name'].apply(determine_sector)
+    
+    if 'band' not in df.columns:
+        df['band'] = df['Downlink Center Carrier Frequency'].apply(determine_band)
+    
+    # Convert sector to int for comparison
+    try:
+        sector = int(sector)
+    except (ValueError, TypeError):
+        return {'error': 'Invalid sector'}
+    
     # Filter data
     filtered_df = df[(df['site_id'] == site_id) & 
-                      (df['Cell Name'] == cell_name) & 
+                      (df['sector'] == sector) & 
                       (df['date'].dt.date >= start_date) & 
                       (df['date'].dt.date <= end_date)]
     
     if filtered_df.empty:
-        return {'dates': [], 'bands': {}}
-    
-    # Add band column if not present
-    if 'band' not in filtered_df.columns:
-        filtered_df['band'] = filtered_df['Downlink Center Carrier Frequency'].apply(determine_band)
+        return {'dates': [], 'cells': {}}
     
     # Get unique dates and sort them
     dates = sorted(filtered_df['date'].dt.date.unique())
     date_strings = [d.strftime('%Y-%m-%d') for d in dates]
     
-    # Initialize result structure
-    bands_data = {
-        'L900': [0] * len(dates),
-        'L1800': [0] * len(dates),
-        'L2100': [0] * len(dates),
-        'L2300 F1': [0] * len(dates),
-        'L2300 F2': [0] * len(dates),
-        'L2300 F3': [0] * len(dates)
-    }
+    # Get unique cell names for this sector
+    cell_names = filtered_df['Cell Name'].unique()
     
-    # Group by date and band, calculate mean PRB utilization
-    for i, date in enumerate(dates):
-        day_data = filtered_df[filtered_df['date'].dt.date == date]
+    # Initialize result structure
+    cells_data = {}
+    
+    # For each cell, create a data series
+    for cell_name in cell_names:
+        cells_data[cell_name] = [0] * len(dates)
         
-        for band in bands_data.keys():
-            band_data = day_data[day_data['band'] == band]
-            if not band_data.empty:
+        cell_df = filtered_df[filtered_df['Cell Name'] == cell_name]
+        
+        # Group by date and calculate mean PRB utilization
+        for i, date in enumerate(dates):
+            day_data = cell_df[cell_df['date'].dt.date == date]
+            if not day_data.empty:
                 # Convert percentage values to decimal for consistency (0-1 range)
-                prb_util = band_data['DL PRB Utilization _percent'].mean() / 100.0
+                prb_util = day_data['DL PRB Utilization _percent'].mean() / 100.0
                 # Handle NaN values
-                bands_data[band][i] = 0 if pd.isna(prb_util) else prb_util
+                cells_data[cell_name][i] = 0 if pd.isna(prb_util) else prb_util
     
     return {
         'dates': date_strings,
-        'bands': bands_data
+        'cells': cells_data
     }
 
 # Routes
@@ -316,27 +328,27 @@ def get_data():
     result = process_prb_data(site_ids, reference_date)
     return jsonify(result)
 
-@app.route('/cell_names')
-def get_cell_names():
+@app.route('/sectors')
+def get_sectors():
     site_id = request.args.get('site_id')
     
     if not site_id:
-        return jsonify({'error': 'No site_id provided', 'cell_names': []})
+        return jsonify({'error': 'No site_id provided', 'sectors': []})
     
-    cell_names = get_cell_names_for_site(site_id)
-    return jsonify({'cell_names': cell_names})
+    sectors = get_sectors_for_site(site_id)
+    return jsonify({'sectors': sectors})
 
-@app.route('/historical_cell_data')
-def historical_cell_data():
+@app.route('/historical_sector_data')
+def historical_sector_data():
     site_id = request.args.get('site_id')
-    cell_name = request.args.get('cell_name')
+    sector = request.args.get('sector')
     days = request.args.get('days', 7)
     
-    if not site_id or not cell_name:
-        return jsonify({'error': 'Missing required parameters (site_id, cell_name)'})
+    if not site_id or not sector:
+        return jsonify({'error': 'Missing required parameters (site_id, sector)'})
     
     try:
-        data = get_historical_cell_data(site_id, cell_name, days)
+        data = get_historical_sector_data(site_id, sector, days)
         return jsonify(data)
     except Exception as e:
         import traceback
